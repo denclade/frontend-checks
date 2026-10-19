@@ -1,0 +1,21 @@
+@use 'variables';
+@use 'missing-partial';
+.box {
+  padding: 8px;
+  margin: 3px;
+  color: #123456;
+  // brand colour from the logo, not themeable
+  border-color: #abcdef;
+  background: var(--color-undefined);
+}
+.list {
+  flex: 1;
+  overflow-y: auto;
+}
+.fine {
+  @include scroll-fill;
+}
+.pair {
+  color: oklch(60% 0 0);
+  background-color: oklch(65% 0 0); // deliberately low
+}

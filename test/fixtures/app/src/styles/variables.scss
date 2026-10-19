@@ -1,0 +1,8 @@
+@use 'theme-colors' as theme;
+:root {
+  @include theme.light-theme-vars;
+  --space-1: 4px;
+  --space-2: 8px;
+  --radius-sm: 4px;
+  --color-alias: var(--color-text);
+}

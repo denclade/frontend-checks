@@ -1,0 +1,10 @@
+@mixin light-theme-vars {
+  --color-bg: oklch(100% 0 0);
+  --color-text: oklch(20% 0 0);
+  --color-text-faint: oklch(90% 0 0);
+}
+@mixin dark-theme-vars {
+  --color-bg: oklch(15% 0 0);
+  --color-text: oklch(95% 0 0);
+  --color-text-faint: oklch(25% 0 0);
+}
