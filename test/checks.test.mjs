@@ -41,6 +41,10 @@ test("styles: unresolved import, unjustified literals, token-sized px, undefined
   assert.ok(has(failures, "main.scss:19", "colour literal"));
   assert.ok(!has(failures, "main.scss:20"), "a comment on the line justifies a literal");
   assert.ok(!has(failures, "_theme-colors.scss"), "the theme is where colours live");
+  assert.ok(!has(failures, "variables.scss"), "role tokens may name a colour");
+  assert.ok(!has(failures, "main.scss:23"), "a colour derived from a token is no literal");
+  assert.ok(!has(failures, "main.scss:27") && !has(failures, "main.scss:28"), "one comment justifies the block of literals below it");
+  assert.ok(has(failures, "main.scss:30", "colour literal"), "... but not past an unrelated line");
 });
 
 test("scroll: flex item that scrolls without min-height, mixin is fine", async () => {

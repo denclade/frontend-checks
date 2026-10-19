@@ -34,7 +34,8 @@ function themeTokens(config) {
   for (const [label, mixin] of Object.entries(config.themes)) {
     const own = customPropertiesOf(theme, (s) => s === `@mixin ${mixin}` || s.startsWith(`@mixin ${mixin}(`));
     if (Object.keys(own).length === 0) throw new Error(`@mixin ${mixin} not found in ${config.themeFile}`);
-    out[label] = resolveColorTokens({ ...base, ...own });
+    const raw = { ...base, ...own };
+    out[label] = { colors: resolveColorTokens(raw), raw };
   }
   return out;
 }
@@ -53,7 +54,7 @@ function backgroundOf(decls, tokens) {
     if (value === "transparent" || value === "none") continue;
     if (prop === "background" && /gradient|url\(/.test(value)) return { state: "unknown" };
     const color = parseColor(raw, tokens);
-    return color ? { state: "color", color } : { state: "unknown" };
+    return color ? { state: "color", color, raw } : { state: "unknown" };
   }
   return { state: "none" };
 }
@@ -66,6 +67,40 @@ function thresholdFor(decls) {
   const weight = decls?.["font-weight"];
   const bold = weight === "bold" || parseInt(weight, 10) >= 700;
   return px !== null && (px >= 24 || (bold && px >= 18.66)) ? 3.0 : 4.5;
+}
+
+const strip = (name) => name.replace(/^--/, "");
+const tokenName = (raw) => String(raw ?? "").trim().match(/^var\(\s*--([\w-]+)\s*\)$/)?.[1];
+
+/** The token a value actually paints with: `var(--x, fallback)` is x when the
+ * theme defines it, otherwise whatever its fallback names (as parseColor). */
+function paintedToken(raw, colors) {
+  const match = String(raw ?? "").replace(/!important/i, "").trim().match(/^var\(\s*--([\w-]+)\s*(?:,([\s\S]+))?\)$/);
+  if (!match) return undefined;
+  return colors[match[1]] || !match[2] ? match[1] : paintedToken(match[2], colors);
+}
+
+/** The bar a measured pair must clear: the declared threshold (or accepted
+ * exception) when both sides are a token pair the app lists, otherwise WCAG
+ * by font size -- so one combination is judged the same in every phase. */
+function floorFor(config, label, pairs, raw, colors) {
+  // An alias (`--color-surface: var(--color-bg)`) is the token it names.
+  const canonical = (name, seen = new Set()) => {
+    const alias = name && !seen.has(name) ? tokenName(raw[name]) : undefined;
+    return alias ? canonical(alias, seen.add(name)) : name;
+  };
+  const keyOf = (fg, bg) => `${canonical(strip(fg))}:${canonical(strip(bg))}`;
+  const declared = new Map(pairs.map(([fg, bg, min]) => [keyOf(fg, bg), min]));
+  const exceptions = new Map(Object.entries(config.contrast.exceptions)
+    .filter(([key]) => key.startsWith(`${label}:`))
+    .map(([key, value]) => [keyOf(...key.split(":").slice(1)), value.min]));
+  return (fgRaw, bgRaw, decls) => {
+    const fg = paintedToken(fgRaw, colors);
+    const bg = paintedToken(bgRaw, colors);
+    if (!fg || !bg) return thresholdFor(decls);
+    const key = keyOf(fg, bg);
+    return exceptions.get(key) ?? declared.get(key) ?? thresholdFor(decls);
+  };
 }
 
 const isBaseClassSelector = (selector) => /^\.[A-Za-z0-9_-]+$/.test(selector);
@@ -87,17 +122,16 @@ function classIndex(file, cache) {
   return index;
 }
 
-function checkTokenPairs(report, config, label, tokens) {
-  const pairs = [...config.contrast.pairs, ...config.contrast.extraPairs(tokens)];
+function checkTokenPairs(report, config, label, tokens, pairs) {
   for (const [fgName, bgName, minimum] of pairs) {
-    const fg = tokens[fgName.replace(/^--/, "")];
-    const bg = tokens[bgName.replace(/^--/, "")];
+    const fg = tokens[strip(fgName)];
+    const bg = tokens[strip(bgName)];
     if (!fg || !bg) {
       fail(report, config.themeFile, 1, `${label}: ${!fg ? fgName : bgName} does not resolve to an oklch() colour`);
       continue;
     }
     const ratio = contrastRatio(fg, bg);
-    const exception = config.contrast.exceptions[`${label}:${fgName.replace(/^--/, "")}:${bgName.replace(/^--/, "")}`];
+    const exception = config.contrast.exceptions[`${label}:${strip(fgName)}:${strip(bgName)}`];
     const floor = exception ? exception.min : minimum;
     const line = `${label}: ${fgName} on ${bgName} (${toHex(fg)} on ${toHex(bg)}) ${ratio.toFixed(2)}:1, needs ${minimum}:1`;
     if (ratio + 0.005 < floor) fail(report, config.themeFile, 1, line);
@@ -106,7 +140,8 @@ function checkTokenPairs(report, config, label, tokens) {
   return pairs.length;
 }
 
-function checkSameRule(report, config, label, tokens, scssFiles) {
+
+function checkSameRule(report, config, { label, tokens, floor }, scssFiles) {
   let checked = 0;
   for (const file of scssFiles) {
     const rel = toRelative(config.root, file);
@@ -119,10 +154,10 @@ function checkSameRule(report, config, label, tokens, scssFiles) {
       const bg = backgroundOf(rule.decls, tokens);
       if (!fg || bg.state !== "color") continue;
       checked++;
-      const threshold = thresholdFor(rule.decls);
+      const threshold = floor(rule.decls.color, bg.raw, rule.decls);
       const ratio = contrastRatio(fg, bg.color);
       if (ratio + 0.005 < threshold) {
-        fail(report, rel, rule.line, `${label}: ${selector} (${toHex(fg)} on ${toHex(bg.color)}) ${ratio.toFixed(2)}:1, needs ${threshold}:1`);
+        fail(report, rel, rule.line, `${label}: ${selector.replace(/\s+/g, " ")} (${toHex(fg)} on ${toHex(bg.color)}) ${ratio.toFixed(2)}:1, needs ${threshold}:1`);
       }
     }
   }
@@ -168,16 +203,26 @@ function inlineStyleOf(node) {
   return decls;
 }
 
-function checkRendered(report, config, label, tokens, tsxFiles, globalIndex, cache) {
+function checkRendered(report, config, { label, tokens, floor }, tsxFiles, globalIndex, cache) {
   let checked = 0;
   for (const file of tsxFiles) {
     const rel = toRelative(config.root, file);
     const sf = ts.createSourceFile(file, readText(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const modules = new Map();
+    // Icons are graphics, not text: WCAG 1.4.11 asks 3:1 of them.
+    const icons = new Set();
     for (const stmt of sf.statements) {
-      if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier) || !stmt.moduleSpecifier.text.endsWith(".scss")) continue;
-      const name = stmt.importClause?.name?.getText();
-      if (name) modules.set(name, classIndex(path.resolve(path.dirname(file), stmt.moduleSpecifier.text), cache));
+      if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+      const from = stmt.moduleSpecifier.text;
+      const clause = stmt.importClause;
+      if (from.endsWith(".scss") && clause?.name) {
+        modules.set(clause.name.getText(), classIndex(path.resolve(path.dirname(file), from), cache));
+      } else if (/^lucide-solid(\/|$)/.test(from)) {
+        if (clause?.name) icons.add(clause.name.getText());
+        if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+          for (const element of clause.namedBindings.elements) icons.add(element.name.getText());
+        }
+      }
     }
     const declsOf = (classes) => {
       let merged = null;
@@ -196,17 +241,19 @@ function checkRendered(report, config, label, tokens, tsxFiles, globalIndex, cac
         const inline = inlineStyleOf(target);
         const decls = { ...declsOf(classNamesOf(target, modules)), ...inline };
         const own = backgroundOf(decls, tokens);
-        if (own.state === "color") next = { color: own.color, where: `${rel}:${line}` };
+        if (own.state === "color") next = { color: own.color, raw: own.raw, where: `${rel}:${line}` };
         else if (own.state === "unknown") next = null;
 
         const fg = parseColor(decls.color, tokens);
-        const bg = own.state === "color" ? own.color : own.state === "none" ? background?.color : null;
+        const behind = own.state === "color" ? own : own.state === "none" ? background : null;
+        const bg = behind?.color;
         // Colour and background from the element's own class are one CSS
         // rule's business -- phase 2 reports those.
         const ownClassPair = own.state === "color" && !inline.color && !inline["background-color"] && !inline.background;
         if (fg && bg && !ownClassPair && !jsxAttribute(target, "disabled")) {
           checked++;
-          const threshold = thresholdFor(decls);
+          const declared = floor(decls.color, behind.raw, decls);
+          const threshold = icons.has(target.tagName.getText()) ? Math.min(3.0, declared) : declared;
           const ratio = contrastRatio(fg, bg);
           if (ratio + 0.005 < threshold) {
             const from = own.state === "color" ? "own background" : `background from ${background.where}`;
@@ -237,11 +284,13 @@ export async function checkContrast(config) {
 
   let pairs = 0;
   let derived = 0;
-  for (const [label, tokens] of Object.entries(themes)) {
-    pairs += checkTokenPairs(report, config, label, tokens);
+  for (const [label, { colors: tokens, raw }] of Object.entries(themes)) {
+    const declared = [...config.contrast.pairs, ...config.contrast.extraPairs(tokens)];
+    pairs += checkTokenPairs(report, config, label, tokens, declared);
     if (config.contrast.derived) {
-      derived += checkSameRule(report, config, label, tokens, scssFiles);
-      derived += checkRendered(report, config, label, tokens, tsxFiles, globalIndex, cache);
+      const theme = { label, tokens, floor: floorFor(config, label, declared, raw, tokens) };
+      derived += checkSameRule(report, config, theme, scssFiles);
+      derived += checkRendered(report, config, theme, tsxFiles, globalIndex, cache);
     }
   }
   report.summary = `${Object.keys(themes).length} theme(s), ${pairs} token pair(s), ${derived} derived pair(s)`;

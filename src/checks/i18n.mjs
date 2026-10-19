@@ -16,6 +16,7 @@
 // Warnings, not failures: keys nothing references (minus `dynamicKeys`),
 // and a feature file repeating wording the main file already has.
 
+import ts from "typescript";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { collectFiles, readText, toRelative } from "../files.mjs";
@@ -32,6 +33,20 @@ function readSettings(root) {
 const fileFor = (root, pattern, locale) => path.join(root, pattern.replace("{languageTag}", locale).replace("{locale}", locale));
 const placeholders = (message) => new Set([...JSON.stringify(message).matchAll(/\{(\w+)\}/g)].map((m) => m[1]));
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
+
+/** Every `m.key` in the code (not in comments), with its line. */
+function messageReferences(file, text) {
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, /x$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const out = [];
+  const visit = (node) => {
+    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "m") {
+      out.push({ key: node.name.text, line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1 });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
 
 export async function checkI18n(config) {
   const report = createReport("i18n");
@@ -83,9 +98,9 @@ export async function checkI18n(config) {
     for (const file of collectFiles(path.join(root, dir), /\.(tsx?|jsx?|mjs)$/, config.ignoreDirs)) {
       const text = readText(file);
       if (!/import\s+\*\s+as\s+m\s+from\s+["'][^"']*paraglide\/messages(\.js)?["']/.test(text)) continue;
-      for (const match of text.matchAll(/\bm\.([A-Za-z0-9_]+)\b/g)) {
-        referenced.add(match[1]);
-        if (!base.has(match[1])) fail(report, toRelative(root, file), text.slice(0, match.index).split("\n").length, `m.${match[1]} has no message in ${baseLocale}`);
+      for (const { key, line } of messageReferences(file, text)) {
+        referenced.add(key);
+        if (!base.has(key)) fail(report, toRelative(root, file), line, `m.${key} has no message in ${baseLocale}`);
       }
     }
   }

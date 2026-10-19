@@ -19,3 +19,13 @@
   color: oklch(60% 0 0);
   background-color: oklch(65% 0 0); // deliberately low
 }
+.derived {
+  background: rgba(var(--color-text-rgb), 0.1);
+}
+.swatch {
+  // Fixed preview colours, independent of the theme.
+  --swatch-bg: #ffffff;
+  --swatch-line: #d4d8de;
+  display: block;
+  color: #000000;
+}

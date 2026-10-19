@@ -65,6 +65,7 @@ export async function loadConfig(root = process.cwd()) {
   const own = existsSync(file) ? (await import(pathToFileURL(file).href)).default : {};
   const config = merge(DEFAULTS, own);
   config.root = root;
-  config.styles.colorSources = [config.themeFile, ...config.styles.colorSources];
+  // The theme defines the colours, variables.scss maps roles onto them.
+  config.styles.colorSources = [config.themeFile, config.variablesFile, ...config.styles.colorSources];
   return config;
 }

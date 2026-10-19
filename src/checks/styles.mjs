@@ -19,7 +19,10 @@ import { collectFiles, readText, toRelative } from "../files.mjs";
 import { createReport, fail } from "../report.mjs";
 import { customPropertiesOf, stripComments } from "../scss.mjs";
 
-const COLOR_LITERAL = /(#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(|\boklch\(|\bhwb\(|\blab\(|\blch\()/;
+// A colour function only counts as a literal when its channels are numbers:
+// `rgba(var(--color-primary-rgb), 0.1)` or `oklch(from var(--x) …)` derive
+// from a token.
+const COLOR_LITERAL = /(#[0-9a-fA-F]{3,8}\b|\b(rgba?|hsla?|oklch|hwb|lab|lch)\((?!\s*(var\(|from\s)))/;
 const SPACING_PROPERTY = /^\s*(padding|margin|gap|row-gap|column-gap)(-[a-z-]+)?\s*:/;
 const RADIUS_PROPERTY = /^\s*border(-[a-z]+)*-radius\s*:/;
 const PX_VALUE = /(?<![\w.-])(\d{1,3})px\b/g;
@@ -43,12 +46,17 @@ function sizeTokens(variables, prefix) {
   return out;
 }
 
-/** A comment on the line itself or alone on the line above is the
- * justification a deliberate literal needs. */
-function isJustified(lines, index) {
-  const own = lines[index];
-  const above = lines[index - 1]?.trim() ?? "";
-  return /\/\/|\/\*/.test(own) || above.startsWith("//") || above.startsWith("/*") || above.endsWith("*/");
+/** The justification a deliberate literal needs: a comment on its own line,
+ * or a comment above a run of such lines (`sameKind`) that it opens --
+ * one reason for a block of fixed swatch colours is enough. */
+function isJustified(lines, index, sameKind) {
+  if (/\/\/|\/\*/.test(lines[index])) return true;
+  for (let i = index - 1; i >= 0; i--) {
+    const above = lines[i].trim();
+    if (above.startsWith("//") || above.startsWith("/*") || above.endsWith("*/")) return true;
+    if (!sameKind(lines[i])) return false;
+  }
+  return false;
 }
 
 export async function checkStyles(config) {
@@ -62,14 +70,19 @@ export async function checkStyles(config) {
   const radius = sizeTokens(variables, "radius-");
   const vendored = (rel) => config.styles.vendored?.some((prefix) => rel.startsWith(prefix));
 
-  // Every custom property that exists somewhere.
+  // Every custom property that exists somewhere: declared in a stylesheet
+  // (`--x:`, or a family `--x-#{$key}:` from a Sass loop), or named as a
+  // string in the code (`style={{ "--x": … }}`, `setProperty("--x", …)`).
   const defined = new Set(config.styles.externalProperties ?? []);
+  const families = [];
   for (const file of [...scssFiles, ...codeFiles, path.join(config.root, "index.html")]) {
     if (!existsSync(file)) continue;
-    // A declaration (`--x:`) or a name in quotes (`"--x": …`,
-    // `setProperty("--x", …)`) -- never a `var(--x)` usage.
-    for (const match of readText(file).matchAll(/(?:^|[\s{;"'`])--([a-zA-Z0-9_-]+)\s*["'`]?\s*[:,]/g)) defined.add(match[1]);
+    const text = readText(file);
+    for (const match of text.matchAll(/(?:^|[\s{;"'`])--([a-zA-Z0-9_-]+)\s*["'`]?\s*:/g)) defined.add(match[1]);
+    for (const match of text.matchAll(/["'`]--([a-zA-Z0-9_-]+)["'`]/g)) defined.add(match[1]);
+    for (const match of text.matchAll(/--([a-zA-Z0-9_-]*)#\{/g)) families.push(match[1]);
   }
+  const isDefined = (name) => defined.has(name) || families.some((prefix) => prefix && name.startsWith(prefix));
 
   for (const file of scssFiles) {
     const rel = toRelative(config.root, file);
@@ -88,12 +101,12 @@ export async function checkStyles(config) {
       if (!line.trim() || /^\s*@(use|forward|import)\b/.test(line)) return;
       const at = index + 1;
 
-      if (config.styles.literals && !colorSource && COLOR_LITERAL.test(line) && !isJustified(rawLines, index)) {
+      if (config.styles.literals && !colorSource && COLOR_LITERAL.test(line) && !isJustified(rawLines, index, (l) => COLOR_LITERAL.test(l))) {
         fail(report, rel, at, `colour literal without a comment saying why -- use a token: ${line.trim()}`);
       }
 
       const tokens = SPACING_PROPERTY.test(line) ? spacing : RADIUS_PROPERTY.test(line) ? radius : null;
-      if (config.styles.literals && tokens && !isJustified(rawLines, index)) {
+      if (config.styles.literals && tokens && !isJustified(rawLines, index, (l) => SPACING_PROPERTY.test(l) || RADIUS_PROPERTY.test(l))) {
         for (const px of line.matchAll(PX_VALUE)) {
           const token = tokens.get(Number(px[1]));
           if (token) fail(report, rel, at, `${px[0]} instead of var(${token}): ${line.trim()}`);
@@ -102,7 +115,7 @@ export async function checkStyles(config) {
 
       for (const usage of line.matchAll(/var\(\s*--([a-zA-Z0-9_-]+)/g)) {
         const name = usage[1];
-        if (!defined.has(name) && !name.endsWith("-") && !line.includes(`--${name}#{`)) {
+        if (!isDefined(name) && !name.endsWith("-")) {
           fail(report, rel, at, `var(--${name}) is defined nowhere`);
         }
       }
@@ -114,7 +127,7 @@ export async function checkStyles(config) {
     const text = readText(file);
     for (const usage of text.matchAll(/var\(\s*--([a-zA-Z0-9_-]+)/g)) {
       const name = usage[1];
-      if (!defined.has(name) && !name.endsWith("-")) fail(report, rel, text.slice(0, usage.index).split("\n").length, `var(--${name}) is defined nowhere`);
+      if (!isDefined(name) && !name.endsWith("-")) fail(report, rel, text.slice(0, usage.index).split("\n").length, `var(--${name}) is defined nowhere`);
     }
   }
 
