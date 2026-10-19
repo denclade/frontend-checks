@@ -8,7 +8,7 @@ einmal implementiert statt viermal kopiert.
 |------------|-------|
 | `a11y`     | Icon-Buttons/Links ohne Namen, `<img>` ohne `alt`, `div`/`span`/`li` mit `onClick` ohne Rolle+Tabindex, `role="button"` ohne Tabindex |
 | `contrast` | 3 Phasen in jedem Theme: Token-Paare, Farbe+Hintergrund derselben SCSS-Regel, Text auf dem Hintergrund des JSX-Elternelements |
-| `modules`  | Jede `styles.x`-Referenz auf ein importiertes `*.module.scss` existiert dort (mit der Sass der App kompiliert) — sonst `class="undefined"` |
+| `modules`  | Jede `styles.x`-Referenz auf ein importiertes `*.module.scss` existiert dort (mit der Sass der App kompiliert) — sonst `class="undefined"`; kein DOM-Selektor-String (`closest`, `querySelector`, `matches`) nennt eine Modulklasse, die gescoped nichts mehr trifft |
 | `styles`   | `@use`/`@import` lösen auf; keine Farbliterale außerhalb der Farbquellen und keine px-Abstände/-Radien, für die es ein Token gibt (jeweils ohne Begründungskommentar); keine undefinierten `var(--x)` |
 | `scroll`   | Scrollendes Flex-Kind ohne `min-height` (→ `@include scroll-fill`) |
 | `i18n`     | Schlüssel- und Platzhalter-Parität aller Locales, im Code benutzte Schlüssel existieren, doppelte Schlüssel; unbenutzte als Warnung |

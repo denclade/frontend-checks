@@ -1,0 +1,7 @@
+.panel {
+  &__menu { display: grid; }
+  :global(.cm-editor) { color: inherit; }
+  :global {
+    .cm-gutters { color: inherit; }
+  }
+}

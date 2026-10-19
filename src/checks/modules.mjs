@@ -6,6 +6,11 @@
 // The modules are compiled with the app's own Sass, so classes that come from
 // a mixin or from `&__element` nesting are known too. With `localsConvention:
 // "camelCase"` a module exports both spellings, so both are accepted.
+//
+// The other way round, too: a selector string handed to the DOM
+// (`closest('.card-actions__menu')`) that names a module class finds nothing
+// once the class is scoped -- it has to be built from the module
+// (`closest(\`.${styles.cardActionsMenu}\`)`).
 
 import ts from "typescript";
 import { createRequire } from "node:module";
@@ -34,8 +39,15 @@ function classesOf(sass, file, root, cache) {
     quietDeps: true,
     logger: { warn() {}, debug() {} },
   }).css;
-  // Selectors only: declaration blocks and strings could hold anything.
-  const selectors = css.replace(/\/\*[\s\S]*?\*\//g, "").replace(/"[^"]*"|'[^']*'/g, "").replace(/\{[^{}]*\}/g, "{}");
+  // Selectors only: declaration blocks and strings could hold anything, and
+  // what sits in :global(...) or follows a bare :global (a `:global { }`
+  // block compiles to that) is not the module's.
+  const selectors = css
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/"[^"]*"|'[^']*'/g, "")
+    .replace(/\{[^{}]*\}/g, "{}")
+    .replace(/:global\([^()]*\)/g, "")
+    .replace(/:global\s[^{,]*/g, "");
   const names = new Set();
   for (const match of selectors.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
     names.add(match[1]);
@@ -43,6 +55,38 @@ function classesOf(sass, file, root, cache) {
   }
   cache.set(file, names);
   return names;
+}
+
+const DOM_SELECTOR_CALLS = new Set(["closest", "querySelector", "querySelectorAll", "matches"]);
+
+/** Class names a selector text mentions. */
+const selectorClasses = (text) => [...text.matchAll(/(?:^|[\s>+~,(:])\.(-?[_a-zA-Z][\w-]*)/g)].map((match) => match[1]);
+
+/** The literal parts of a string or template argument. */
+function literalTexts(node) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [node.text];
+  if (ts.isTemplateExpression(node)) return [node.head.text, ...node.templateSpans.map((span) => span.literal.text)];
+  return [];
+}
+
+/** Every class some module of the app defines, minus those a global stylesheet has as well. */
+function moduleOnlyClasses(sass, config, cache, report) {
+  const sheets = collectFiles(path.join(config.root, config.srcDir), /\.s?css$/, config.ignoreDirs);
+  const local = new Set();
+  const global = new Set();
+  for (const sheet of sheets) {
+    if (/\.module\.scss$/.test(sheet)) {
+      try {
+        for (const name of classesOf(sass, sheet, config.root, cache)) local.add(name);
+      } catch (error) {
+        fail(report, toRelative(config.root, sheet), 1, `does not compile: ${String(error.message).split("\n")[0]}`);
+      }
+    } else {
+      for (const name of selectorClasses(readText(sheet).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ""))) global.add(name);
+    }
+  }
+  for (const name of global) local.delete(name);
+  return local;
 }
 
 export async function checkModules(config) {
@@ -54,7 +98,9 @@ export async function checkModules(config) {
   }
   const cache = new Map();
   const files = collectFiles(path.join(config.root, config.srcDir), /\.tsx?$/, config.ignoreDirs);
+  const scoped = moduleOnlyClasses(sass, config, cache, report);
   let references = 0;
+  let selectors = 0;
 
   for (const file of files) {
     const rel = toRelative(config.root, file);
@@ -65,9 +111,17 @@ export async function checkModules(config) {
         modules.set(st.importClause.name.text, path.resolve(path.dirname(file), st.moduleSpecifier.text));
       }
     }
-    if (modules.size === 0) continue;
-
     const visit = (node) => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && DOM_SELECTOR_CALLS.has(node.expression.name.text) && node.arguments[0]) {
+        selectors++;
+        for (const text of literalTexts(node.arguments[0])) {
+          for (const name of selectorClasses(text)) {
+            if (!scoped.has(name)) continue;
+            const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+            fail(report, rel, line, `selector ".${name}" names a CSS-module class -- scoped, it matches nothing; build it from the module (\`.\${styles.${camel(name)}}\`)`);
+          }
+        }
+      }
       let id;
       let name;
       if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
@@ -98,6 +152,6 @@ export async function checkModules(config) {
     visit(sf);
   }
 
-  report.summary = `${references} reference(s) into ${cache.size} module(s)`;
+  report.summary = `${references} reference(s) into ${cache.size} module(s), ${selectors} DOM selector(s)`;
   return report;
 }

@@ -81,3 +81,12 @@ test("tokens: a palette mixin of the same file counts as written in the theme, o
     link: "var(--blue)",
   });
 });
+
+test("modules: unknown module class, DOM selector naming a scoped class, :global stays global", async () => {
+  const { failures } = await run("modules");
+  assert.ok(has(failures, "Panel.tsx", "styles.panelMissing is not a class"));
+  assert.ok(has(failures, "Panel.tsx:4", 'selector ".panel__menu" names a CSS-module class'));
+  assert.ok(!has(failures, "cm-editor"), "a :global(...) class is no module class");
+  assert.ok(!has(failures, "cm-gutters"), "a class in a :global { } block is no module class");
+  assert.ok(!has(failures, "Panel.tsx:5"));
+});

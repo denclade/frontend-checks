@@ -65,7 +65,8 @@ function merge(defaults, overrides) {
   return out;
 }
 
-export async function loadConfig(root = process.cwd()) {
+export async function loadConfig(dir = process.cwd()) {
+  const root = path.resolve(dir);
   const file = path.join(root, CONFIG_FILE);
   const own = existsSync(file) ? (await import(pathToFileURL(file).href)).default : {};
   const config = merge(DEFAULTS, own);
