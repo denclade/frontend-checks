@@ -129,14 +129,20 @@ export function flattenSelector(chain) {
 /** The custom properties declared directly in the first block whose
  * selector satisfies `matches` (`--name` without dashes -> raw value). */
 export function customPropertiesOf(source, matches) {
+  const rules = parseRules(source).filter((rule) => rule.chain.length === 1);
   const tokens = {};
-  for (const rule of parseRules(source)) {
-    const own = rule.chain[rule.chain.length - 1];
-    if (rule.chain.length !== 1 || !matches(own)) continue;
+  const collect = (rule, seen) => {
+    // A mixin of the same file included here (a shared palette) counts as if
+    // written in place, before the rule's own declarations.
+    for (const name of rule.includes) {
+      const mixin = rules.find((r) => r.chain[0] === `@mixin ${name}` || r.chain[0].startsWith(`@mixin ${name}(`));
+      if (mixin && !seen.has(name)) collect(mixin, new Set([...seen, name]));
+    }
     for (const [name, value] of Object.entries(rule.decls)) {
       if (name.startsWith("--")) tokens[name.slice(2)] = value;
     }
-  }
+  };
+  for (const rule of rules) if (matches(rule.chain[0])) collect(rule, new Set());
   return tokens;
 }
 

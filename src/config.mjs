@@ -51,12 +51,15 @@ const DEFAULTS = {
 };
 
 /** Shallow per-section merge: an app overrides whole options, never parts
- * of an option, so what a config says is exactly what applies. */
+ * of an option, so what a config says is exactly what applies. `themes` is one
+ * option, not a section: an app names exactly the themes it has. */
+const WHOLE = new Set(["themes"]);
+
 function merge(defaults, overrides) {
   const out = { ...defaults };
   for (const [key, value] of Object.entries(overrides ?? {})) {
     const base = defaults[key];
-    const isSection = base && typeof base === "object" && !Array.isArray(base) && value && typeof value === "object" && !Array.isArray(value);
+    const isSection = !WHOLE.has(key) && base && typeof base === "object" && !Array.isArray(base) && value && typeof value === "object" && !Array.isArray(value);
     out[key] = isSection ? { ...base, ...value } : value;
   }
   return out;

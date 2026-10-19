@@ -3,6 +3,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { CHECKS, loadConfig } from "../src/index.mjs";
+import { customPropertiesOf } from "../src/scss.mjs";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures/app");
 const config = await loadConfig(FIXTURE);
@@ -68,4 +69,15 @@ test("layers: pure code may not import state or UI, type imports pass, banned pa
   assert.ok(has(failures, "utils/helper.ts:3", "src/utils must not import from src/components"), "multi-line import is seen");
   assert.ok(has(failures, "components/ui/Thing.tsx:2", "src/components/ui must not import from src/routes"));
   assert.ok(has(failures, "store/data.ts:1", '"react" may only be imported in src/island'));
+});
+
+test("tokens: a palette mixin of the same file counts as written in the theme, own declarations win", () => {
+  const source = `
+@mixin palette { --blue: oklch(50% 0.2 250); --text: black; }
+:root { @include palette; --text: oklch(20% 0 0); --link: var(--blue); }`;
+  assert.deepEqual(customPropertiesOf(source, (selector) => selector === ":root"), {
+    blue: "oklch(50% 0.2 250)",
+    text: "oklch(20% 0 0)",
+    link: "var(--blue)",
+  });
 });
