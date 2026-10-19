@@ -203,6 +203,34 @@ function inlineStyleOf(node) {
   return decls;
 }
 
+/** An element whose content is icons and nothing else -- no text, no
+ * expression that could be text -- is a graphic too (a wrapper around a
+ * glyph, a toggle between two glyphs). */
+function onlyIcons(node, icons) {
+  if (!ts.isJsxElement(node)) return false;
+  let sawIcon = false;
+  let sawText = false;
+  const walk = (child) => {
+    if (sawText) return;
+    if (ts.isJsxText(child)) {
+      if (child.text.trim()) sawText = true;
+      return;
+    }
+    if (ts.isJsxSelfClosingElement(child) || ts.isJsxOpeningElement(child)) {
+      if (icons.has(child.tagName.getText())) sawIcon = true;
+      // Attribute values are no content.
+      return;
+    }
+    if (ts.isJsxExpression(child) && child.expression && !ts.isJsxElement(child.expression) && !ts.isJsxSelfClosingElement(child.expression) && !ts.isJsxFragment(child.expression)) {
+      sawText = true;
+      return;
+    }
+    ts.forEachChild(child, walk);
+  };
+  node.children.forEach(walk);
+  return sawIcon && !sawText;
+}
+
 function checkRendered(report, config, { label, tokens, floor }, tsxFiles, globalIndex, cache) {
   let checked = 0;
   for (const file of tsxFiles) {
@@ -253,7 +281,7 @@ function checkRendered(report, config, { label, tokens, floor }, tsxFiles, globa
         if (fg && bg && !ownClassPair && !jsxAttribute(target, "disabled")) {
           checked++;
           const declared = floor(decls.color, behind.raw, decls);
-          const threshold = icons.has(target.tagName.getText()) ? Math.min(3.0, declared) : declared;
+          const threshold = icons.has(target.tagName.getText()) || onlyIcons(node, icons) ? Math.min(3.0, declared) : declared;
           const ratio = contrastRatio(fg, bg);
           if (ratio + 0.005 < threshold) {
             const from = own.state === "color" ? "own background" : `background from ${background.where}`;

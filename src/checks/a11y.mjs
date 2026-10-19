@@ -103,7 +103,10 @@ export async function checkA11y(config) {
       const tabIndex = attribute(attrs, "tabIndex") ?? attribute(attrs, "tabindex");
       const focusable = tag === "button" || tag === "input" || tag === "select" || tag === "textarea" || ((tag === "a" || tag === "A") && attribute(attrs, "href"));
 
-      if (["div", "span", "li"].includes(tag) && attribute(attrs, "onClick") && !ariaHidden && !isClickGuard(attrs) && !isBackdrop(attrs) && (!role || !tabIndex)) {
+      // An option of a listbox is reached through its combobox (aria-activedescendant),
+      // not by Tab: role="option" is a keyboard path of its own.
+      const isOption = isStringValue(role, "option");
+      if (["div", "span", "li"].includes(tag) && attribute(attrs, "onClick") && !ariaHidden && !isClickGuard(attrs) && !isBackdrop(attrs) && !isOption && (!role || !tabIndex)) {
         const clickKey = `${rel}#${attribute(attrs, "onClick").getText().replace(/\s+/g, " ").trim()}`;
         report_(opening, clickKey, `<${tag} onClick> without role and tabindex -- unreachable by keyboard`);
       }
