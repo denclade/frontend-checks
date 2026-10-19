@@ -68,7 +68,9 @@ export async function checkStyles(config) {
   const variables = existsSync(variablesFile) ? customPropertiesOf(readText(variablesFile), (s) => s === ":root") : {};
   const spacing = sizeTokens(variables, "space-");
   const radius = sizeTokens(variables, "radius-");
-  const vendored = (rel) => config.styles.vendored?.some((prefix) => rel.startsWith(prefix));
+  // Stylesheets outside the app's token world: vendored libraries, styles
+  // injected into an iframe where the custom properties do not reach.
+  const foreign = (rel) => config.styles.foreign.some((prefix) => rel.startsWith(prefix));
 
   // Every custom property that exists somewhere: declared in a stylesheet
   // (`--x:`, or a family `--x-#{$key}:` from a Sass loop), or named as a
@@ -86,7 +88,7 @@ export async function checkStyles(config) {
 
   for (const file of scssFiles) {
     const rel = toRelative(config.root, file);
-    if (vendored(rel)) continue;
+    if (foreign(rel)) continue;
     const raw = readText(file);
     const code = stripComments(raw);
     const rawLines = raw.split("\n");
@@ -124,7 +126,7 @@ export async function checkStyles(config) {
 
   for (const file of codeFiles) {
     const rel = toRelative(config.root, file);
-    const text = readText(file);
+    const text = stripComments(readText(file));
     for (const usage of text.matchAll(/var\(\s*--([a-zA-Z0-9_-]+)/g)) {
       const name = usage[1];
       if (!isDefined(name) && !name.endsWith("-")) fail(report, rel, text.slice(0, usage.index).split("\n").length, `var(--${name}) is defined nowhere`);

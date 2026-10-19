@@ -34,6 +34,8 @@ const DEFAULTS = {
   },
   styles: {
     colorSources: [],
+    foreign: [],
+    externalProperties: [],
     literals: true,
   },
   i18n: {
