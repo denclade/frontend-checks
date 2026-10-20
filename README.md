@@ -16,9 +16,15 @@ einmal implementiert statt viermal kopiert.
 
 ## Einbinden
 
+Als Git-Submodul im App-Root, die App hängt per `file:` daran:
+
+```sh
+git submodule add dennis@git.home.arpa:dencla/frontend-checks frontend-checks
+```
+
 ```jsonc
 // package.json der App
-"devDependencies": { "@dencla/frontend-checks": "file:../frontend-checks" },
+"devDependencies": { "@dencla/frontend-checks": "file:./frontend-checks" },
 "scripts": {
   "check:a11y": "frontend-checks a11y",
   // …
@@ -26,8 +32,10 @@ einmal implementiert statt viermal kopiert.
 }
 ```
 
-Sobald das Repo einen Remote hat, `file:../frontend-checks` durch
-`git+ssh://<remote>/frontend-checks.git#v0.1.0` ersetzen.
+Das `install`-Rezept der Apps holt das Submodul (`git submodule update --init`).
+Ein Update der Checks: im Submodul auschecken, in der App den neuen Stand
+committen. Test-Runner der App (Vitest) müssen `frontend-checks/**` ausnehmen,
+die Tests hier laufen mit `node --test`.
 
 ## Konfiguration
 
