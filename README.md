@@ -12,7 +12,7 @@ einmal implementiert statt viermal kopiert.
 | `styles`   | `@use`/`@import` lösen auf; keine Farbliterale außerhalb der Farbquellen und keine px-Abstände/-Radien, für die es ein Token gibt (jeweils ohne Begründungskommentar); keine undefinierten `var(--x)` |
 | `scroll`   | Scrollendes Flex-Kind ohne `min-height` (→ `@include scroll-fill`) |
 | `i18n`     | Schlüssel- und Platzhalter-Parität aller Locales, im Code benutzte Schlüssel existieren, doppelte Schlüssel; unbenutzte als Warnung |
-| `layers`   | `models`/`core`/`utils` → `store` → `components`/`routes`, `components/ui` ↛ `routes`; verbotene Pakete außerhalb erlaubter Ordner |
+| `layers`   | `models`/`core`/`utils`/`api` → `store` → `components`/`routes`, `components/ui` ↛ `routes`; verbotene Pakete außerhalb erlaubter Ordner |
 
 ## Einbinden
 

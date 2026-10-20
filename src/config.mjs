@@ -8,7 +8,9 @@ export const CONFIG_FILE = "frontend-checks.config.mjs";
  * nothing about state or UI, state knows nothing about UI. Type-only
  * imports cross freely -- they cost nothing at runtime. */
 export const DEFAULT_LAYER_RULES = [
-  { from: ["models", "core", "utils"], forbid: ["store", "components", "routes"] },
+  // api/ talks to the outside (backend, native commands) and sits below the
+  // stores like the pure layers: it announces, it does not reach up.
+  { from: ["models", "core", "utils", "api"], forbid: ["store", "components", "routes"] },
   { from: ["store"], forbid: ["components", "routes"] },
   { from: ["components/ui"], forbid: ["routes"], includeTypeImports: true },
 ];
