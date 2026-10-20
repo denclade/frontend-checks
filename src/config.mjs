@@ -30,6 +30,9 @@ const DEFAULTS = {
   },
   contrast: {
     pairs: [],
+    // [{ files: ["src/…/X.module.scss"], background: "color-desk", why: "…" }]:
+    // stylesheets whose rules stand on an ancestor's background.
+    surfaces: [],
     exceptions: {},
     extraPairs: () => [],
     derived: true,

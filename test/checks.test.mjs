@@ -90,3 +90,9 @@ test("modules: unknown module class, DOM selector naming a scoped class, :global
   assert.ok(!has(failures, "cm-gutters"), "a class in a :global { } block is no module class");
   assert.ok(!has(failures, "Panel.tsx:5"));
 });
+
+test("contrast: a stylesheet on a declared surface is measured against that surface", async () => {
+  const { failures } = await run("contrast");
+  assert.ok(has(failures, "Status.module.scss", "light", ".status"));
+  assert.ok(has(failures, "Status.module.scss", "dark", ".status"));
+});

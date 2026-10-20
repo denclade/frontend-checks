@@ -6,7 +6,10 @@
 //    variables.scss). A token that does not resolve is a failure, not a
 //    skip -- a renamed token must not silently drop out of the check.
 // 2. Same-rule pairs: every SCSS rule that sets both `color` and a
-//    background, checked automatically.
+//    background, checked automatically. A rule with a colour but no
+//    background of its own is checked too when its stylesheet is a declared
+//    `contrast.surfaces` entry: a bar or panel drawn on a background that
+//    comes from an ancestor in another component (the editor's dark desk).
 // 3. Rendered pairs: a text colour set on a JSX element (inline style or
 //    its CSS-module class) against the background of its nearest ancestor
 //    element in the same .tsx file -- this catches a themed text colour on
@@ -141,17 +144,29 @@ function checkTokenPairs(report, config, label, tokens, pairs) {
 }
 
 
+/** The background a stylesheet's rules stand on when they set none of their
+ * own, from `contrast.surfaces` -- or null. */
+function surfaceOf(config, rel) {
+  const surface = config.contrast.surfaces.find((entry) => entry.files.includes(rel));
+  return surface ? `var(--${strip(surface.background)})` : null;
+}
+
 function checkSameRule(report, config, { label, tokens, floor }, scssFiles) {
   let checked = 0;
   for (const file of scssFiles) {
     const rel = toRelative(config.root, file);
     if (config.styles.colorSources.includes(rel)) continue;
+    const surface = surfaceOf(config, rel);
     for (const rule of parseRules(readText(file))) {
       const selector = flattenSelector(rule.chain);
       // WCAG 1.4.3 exempts inactive controls.
       if (!selector || /:disabled|\[disabled\]|\[aria-disabled/.test(selector)) continue;
       const fg = parseColor(rule.decls.color, tokens);
-      const bg = backgroundOf(rule.decls, tokens);
+      let bg = backgroundOf(rule.decls, tokens);
+      if (bg.state === "none" && surface) {
+        const color = parseColor(surface, tokens);
+        bg = color ? { state: "color", color, raw: surface } : { state: "unknown" };
+      }
       if (!fg || bg.state !== "color") continue;
       checked++;
       const threshold = floor(rule.decls.color, bg.raw, rule.decls);

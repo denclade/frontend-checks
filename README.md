@@ -53,6 +53,10 @@ export default {
     pairs: [["color-text", "color-bg", 4.5]],    // [Vordergrund, Hintergrund, Minimum]
     exceptions: { "light:fg:bg": { min: 4.0, reason: "…" } },
     extraPairs: (tokens) => [],                  // aus den Tokens abgeleitete Paare
+    // Stylesheets, deren Regeln auf dem Hintergrund eines Vorfahren stehen
+    // (eine Leiste auf der dunklen Arbeitsfläche): ihre Textfarben werden gegen
+    // diesen Token geprüft.
+    surfaces: [{ files: ["src/…/Status.module.scss"], background: "color-desk", why: "…" }],
   },
   styles: {
     colorSources: ["src/styles/_syntax-colors.scss"], // dürfen Farbliterale enthalten
