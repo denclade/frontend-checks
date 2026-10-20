@@ -89,6 +89,11 @@ test("modules: unknown module class, DOM selector naming a scoped class, :global
   assert.ok(!has(failures, "cm-editor"), "a :global(...) class is no module class");
   assert.ok(!has(failures, "cm-gutters"), "a class in a :global { } block is no module class");
   assert.ok(!has(failures, "Panel.tsx:5"));
+  assert.ok(has(failures, "Panel.tsx:8", 'class "panel__menu" is written as text'), "classList.add with a scoped name");
+  assert.ok(!has(failures, "Panel.tsx:9"), "a :global class may be added by name");
+  assert.ok(has(failures, "Panel.tsx:12", 'class "panel__menu" is written as text'), "class attribute and classList key");
+  assert.ok(!has(failures, 'class "sr-only"'), "a class no module defines is global");
+  assert.ok(!has(failures, 'class "cm-gutters"'));
 });
 
 test("contrast: a stylesheet on a declared surface is measured against that surface", async () => {

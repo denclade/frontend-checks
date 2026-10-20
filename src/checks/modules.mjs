@@ -10,7 +10,9 @@
 // The other way round, too: a selector string handed to the DOM
 // (`closest('.card-actions__menu')`) that names a module class finds nothing
 // once the class is scoped -- it has to be built from the module
-// (`closest(\`.${styles.cardActionsMenu}\`)`).
+// (`closest(\`.${styles.cardActionsMenu}\`)`). The same for a bare class
+// name in `class="..."`, a `classList={{...}}` key or `el.classList.add(...)`:
+// written as text it is the unscoped name, and the module's rule never applies.
 
 import ts from "typescript";
 import { createRequire } from "node:module";
@@ -32,32 +34,69 @@ function loadSass(root) {
   return null;
 }
 
-function classesOf(sass, file, root, cache) {
-  if (cache.has(file)) return cache.get(file);
-  const css = sass.compile(file, {
+function compileSheet(sass, file, root) {
+  return sass.compile(file, {
     loadPaths: [path.dirname(file), path.join(root, "src/styles"), path.join(root, "node_modules")],
     quietDeps: true,
     logger: { warn() {}, debug() {} },
   }).css;
-  // Selectors only: declaration blocks and strings could hold anything, and
-  // what sits in :global(...) or follows a bare :global (a `:global { }`
-  // block compiles to that) is not the module's.
+}
+
+/** The class names in the selectors of a stylesheet, compound ones
+ * (`.todo-dot.clear`) included. Declaration blocks and strings could hold
+ * anything, and what sits in :global(...) or follows a bare :global (a
+ * `:global { }` block compiles to that) is not a module's. */
+function classesInCss(css) {
   const selectors = css
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/"[^"]*"|'[^']*'/g, "")
     .replace(/\{[^{}]*\}/g, "{}")
     .replace(/:global\([^()]*\)/g, "")
     .replace(/:global\s[^{,]*/g, "");
+  return [...selectors.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((match) => match[1]);
+}
+
+function classesOf(sass, file, root, cache) {
+  if (cache.has(file)) return cache.get(file);
   const names = new Set();
-  for (const match of selectors.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
-    names.add(match[1]);
-    names.add(camel(match[1]));
+  for (const name of classesInCss(compileSheet(sass, file, root))) {
+    names.add(name);
+    names.add(camel(name));
   }
   cache.set(file, names);
   return names;
 }
 
 const DOM_SELECTOR_CALLS = new Set(["closest", "querySelector", "querySelectorAll", "matches"]);
+const CLASS_LIST_CALLS = new Set(["add", "remove", "toggle", "contains", "replace"]);
+
+/** Class names written as text where an element gets its classes: a class
+ * attribute, the keys of a classList object, an el.classList.add(...). */
+function classNamesAt(node) {
+  if (ts.isJsxAttribute(node) && node.initializer) {
+    const attr = node.name.getText();
+    let value = node.initializer;
+    if (ts.isJsxExpression(value)) value = value.expression;
+    if (!value) return [];
+    if (attr === "class" || attr === "className") {
+      return literalTexts(value).flatMap((text) => text.split(/\s+/)).filter(Boolean);
+    }
+    if (attr === "classList" && ts.isObjectLiteralExpression(value)) {
+      return value.properties.flatMap((prop) => {
+        if (!ts.isPropertyAssignment(prop)) return [];
+        const key = ts.isComputedPropertyName(prop.name) ? prop.name.expression : prop.name;
+        return ts.isIdentifier(key) ? [key.text] : literalTexts(key);
+      });
+    }
+  }
+  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && CLASS_LIST_CALLS.has(node.expression.name.text)) {
+    const target = node.expression.expression;
+    if (ts.isPropertyAccessExpression(target) && target.name.text === "classList") {
+      return node.arguments.flatMap(literalTexts);
+    }
+  }
+  return [];
+}
 
 /** Class names a selector text mentions. */
 const selectorClasses = (text) => [...text.matchAll(/(?:^|[\s>+~,(:])\.(-?[_a-zA-Z][\w-]*)/g)].map((match) => match[1]);
@@ -82,7 +121,15 @@ function moduleOnlyClasses(sass, config, cache, report) {
         fail(report, toRelative(config.root, sheet), 1, `does not compile: ${String(error.message).split("\n")[0]}`);
       }
     } else {
-      for (const name of selectorClasses(readText(sheet).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ""))) global.add(name);
+      // Compiled where it compiles: a global class may come out of a Sass
+      // loop (`&.#{$key}`) and stand nowhere in the text.
+      let css;
+      try {
+        css = /\.scss$/.test(sheet) ? compileSheet(sass, sheet, config.root) : readText(sheet);
+      } catch {
+        css = readText(sheet).replace(/\/\/[^\n]*/g, "");
+      }
+      for (const name of classesInCss(css)) global.add(name);
     }
   }
   for (const name of global) local.delete(name);
@@ -121,6 +168,11 @@ export async function checkModules(config) {
             fail(report, rel, line, `selector ".${name}" names a CSS-module class -- scoped, it matches nothing; build it from the module (\`.\${styles.${camel(name)}}\`)`);
           }
         }
+      }
+      for (const name of classNamesAt(node)) {
+        if (!scoped.has(name)) continue;
+        const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+        fail(report, rel, line, `class "${name}" is written as text, but a CSS module scopes it -- it never applies; use styles.${camel(name)}`);
       }
       let id;
       let name;
