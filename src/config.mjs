@@ -22,7 +22,9 @@ const DEFAULTS = {
   themes: { light: "light-theme-vars", dark: "dark-theme-vars" },
   a11y: {
     iconOnlyComponents: ["IconButton"],
-    namedByProp: {},
+    // The UI family names an icon-only button by its label prop (see
+    // frontend-konzept.md, 2.3).
+    namedByProp: { IconButton: "label" },
     responsivelyHiddenText: null,
     exceptions: {},
   },
