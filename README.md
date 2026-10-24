@@ -1,30 +1,28 @@
-# @dencla/frontend-checks
+# @example/frontend-checks
 
-Die statischen Prüfungen, die alle vier SolidJS-Frontends (`nobo`, `einfachmalab`,
-`code.dencla.de`, `zurnote.de`) laut Frontend-Konzept (Abschnitt 2.6) gemeinsam haben –
-einmal implementiert statt viermal kopiert.
+Shared static checks across SolidJS frontends.
 
-| Check      | Prüft |
-|------------|-------|
-| `a11y`     | Icon-Buttons/Links ohne Namen, `<img>` ohne `alt`, `div`/`span`/`li` mit `onClick` ohne Rolle+Tabindex, `role="button"` ohne Tabindex |
-| `contrast` | 3 Phasen in jedem Theme: Token-Paare, Farbe+Hintergrund derselben SCSS-Regel, Text auf dem Hintergrund des JSX-Elternelements |
-| `modules`  | Jede `styles.x`-Referenz auf ein importiertes `*.module.scss` existiert dort (mit der Sass der App kompiliert) — sonst `class="undefined"`; kein DOM-Selektor-String (`closest`, `querySelector`, `matches`) und kein Klassenname als Text (`class="x"`, `classList`-Schlüssel, `el.classList.add("x")`) nennt eine Modulklasse, die gescoped nichts mehr trifft |
-| `styles`   | `@use`/`@import` lösen auf; keine Farbliterale außerhalb der Farbquellen und keine px-Abstände/-Radien, für die es ein Token gibt (jeweils ohne Begründungskommentar); keine undefinierten `var(--x)` |
-| `scroll`   | Scrollendes Flex-Kind ohne `min-height` (→ `@include scroll-fill`) |
-| `i18n`     | Schlüssel- und Platzhalter-Parität aller Locales, im Code benutzte Schlüssel existieren, doppelte Schlüssel; unbenutzte als Warnung |
-| `layers`   | `models`/`core`/`utils`/`api` → `store` → `components`/`routes`, `components/ui` ↛ `routes`; verbotene Pakete außerhalb erlaubter Ordner |
+| Check      | Description |
+|------------|-------------|
+| `a11y`     | Unnamed icon buttons/links, `<img>` without `alt`, `div`/`span`/`li` with `onClick` missing role + tabindex, `role="button"` missing tabindex |
+| `contrast` | 3 phases per theme: token pairs, color + background within the same SCSS rule, text against the JSX parent's background |
+| `modules`  | Every `styles.x` reference to an imported `*.module.scss` exists (compiled with the app's Sass) — preventing `class="undefined"`; no DOM selector strings (`closest`, `querySelector`, `matches`) or plain class names (`class="x"`, `classList` keys, `el.classList.add("x")`) referencing scoped module classes that would fail to match |
+| `styles`   | `@use`/`@import` resolve properly; no color literals outside color source files and no `px` spacing/radii where a token exists (unless justified via comment); no undefined `var(--x)` |
+| `scroll`   | Scrolling flex children missing `min-height` (→ `@include scroll-fill`) |
+| `i18n`     | Key and placeholder parity across all locales, keys used in code exist, duplicate keys; unused keys reported as warnings |
+| `layers`   | `models`/`core`/`utils`/`api` → `store` → `components`/`routes`, `components/ui` ↛ `routes`; forbidden packages outside allowed directories |
 
-## Einbinden
+## Installation
 
-Als Git-Submodul im App-Root, die App hängt per `file:` daran:
+Add as a Git submodule in the app root and link via `file:`:
 
 ```sh
-git submodule add dennis@git.home.arpa:dencla/frontend-checks frontend-checks
+git submodule add git@example.com:org/frontend-checks.git frontend-checks
 ```
 
 ```jsonc
-// package.json der App
-"devDependencies": { "@dencla/frontend-checks": "file:./frontend-checks" },
+// App package.json
+"devDependencies": { "@example/frontend-checks": "file:./frontend-checks" },
 "scripts": {
   "check:a11y": "frontend-checks a11y",
   // …
@@ -32,52 +30,45 @@ git submodule add dennis@git.home.arpa:dencla/frontend-checks frontend-checks
 }
 ```
 
-Das `install`-Rezept der Apps holt das Submodul (`git submodule update --init`).
-Ein Update der Checks: im Submodul auschecken, in der App den neuen Stand
-committen. Test-Runner der App (Vitest) müssen `frontend-checks/**` ausnehmen,
-die Tests hier laufen mit `node --test`.
+The app's `install` recipe fetches the submodule (`git submodule update --init`). To update checks: check out the new state in the submodule and commit the updated reference in the app. App test runners (Vitest) must exclude `frontend-checks/**`; tests here run via `node --test`.
 
-## Konfiguration
+## Configuration
 
-`frontend-checks.config.mjs` im App-Root, Standardwerte in [`src/config.mjs`](src/config.mjs).
-Jeder Abschnitt überschreibt nur die Optionen, die er nennt:
+Place `frontend-checks.config.mjs` in the app root (defaults in [`src/config.mjs`](src/config.mjs)). Each section only overrides the specified options:
 
 ```js
 export default {
   a11y: {
-    iconOnlyComponents: ["IconButton"],          // Komponenten ohne sichtbaren Text
-    namedByProp: { Tooltip: "label" },           // Komponente -> Prop, die sie benennt
-    exceptions: { "src/x.tsx#onClick={…}": "Begründung" },
+    iconOnlyComponents: ["IconButton"],          // Components without visible text
+    namedByProp: { Tooltip: "label" },           // Component -> prop that provides its accessible name
+    exceptions: { "src/x.tsx#onClick={…}": "Reason" },
   },
   contrast: {
-    pairs: [["color-text", "color-bg", 4.5]],    // [Vordergrund, Hintergrund, Minimum]
+    pairs: [["color-text", "color-bg", 4.5]],    // [foreground, background, minimum]
     exceptions: { "light:fg:bg": { min: 4.0, reason: "…" } },
-    extraPairs: (tokens) => [],                  // aus den Tokens abgeleitete Paare
-    // Stylesheets, deren Regeln auf dem Hintergrund eines Vorfahren stehen
-    // (eine Leiste auf der dunklen Arbeitsfläche): ihre Textfarben werden gegen
-    // diesen Token geprüft.
+    extraPairs: (tokens) => [],                  // Pairs derived from tokens
+    // Stylesheets whose rules sit on an ancestor's background (e.g. a bar on a dark canvas):
+    // their text colors are checked against this token.
     surfaces: [{ files: ["src/…/Status.module.scss"], background: "color-desk", why: "…" }],
   },
   styles: {
-    colorSources: ["src/styles/_syntax-colors.scss"], // dürfen Farbliterale enthalten
-    foreign: ["src/styles/libs/"],                // Fremdes (Bibliotheken, iframe-Styles): ungeprüft
-    externalProperties: ["cm-gutter-width"],      // Custom Properties aus Bibliotheken
+    colorSources: ["src/styles/_syntax-colors.scss"], // Allowed to contain color literals
+    foreign: ["src/styles/libs/"],                // Third-party (libraries, iframe styles): unchecked
+    externalProperties: ["cm-gutter-width"],      // Custom properties from external libraries
   },
   i18n: { dynamicKeys: [/^error_/], featureMessagesDir: "src/features" },
   layers: {
     forbiddenImports: [{ module: /^react(-dom)?(\/|$)/, allowIn: ["diagram/island"], why: "…" }],
-    exceptions: { "src/a.ts->../store/b": "Begründung" },
+    exceptions: { "src/a.ts->../store/b": "Reason" },
   },
 };
 ```
 
-Begründete Ausnahmen gehören in die Konfiguration, nicht in Kommentare im Code –
-so bleiben sie an einer Stelle sichtbar. Einzige Ausnahme: ein bewusstes Farb- oder
-px-Literal wird direkt daneben kommentiert (`// Logo-Farbe, nicht themebar`).
+Justified exceptions belong in the configuration rather than inline code comments, keeping them visible in a single place. The only exception: intentional color or `px` literals are commented directly on the same line (`// Logo color, not themeable`).
 
-## Entwicklung
+## Development
 
 ```sh
 npm install
-npm test        # node --test gegen test/fixtures/app
+npm test        # runs node --test against test/fixtures/app
 ```
