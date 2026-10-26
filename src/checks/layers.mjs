@@ -11,7 +11,8 @@
 // Imports are read from the syntax tree, so multi-line imports, re-exports
 // and dynamic import() are all seen.
 
-import ts from "typescript";
+import * as ts from "typescript/unstable/ast";
+import { parseSourceFile } from "../typescript.mjs";
 import path from "node:path";
 import { collectFiles, readText, toRelative } from "../files.mjs";
 import { createReport, fail } from "../report.mjs";
@@ -25,14 +26,14 @@ function importsOf(sf) {
   const visit = (node) => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const clause = node.importClause;
-      const typeOnly = !!clause && (clause.isTypeOnly || (!clause.name && !!clause.namedBindings && ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.length > 0 && clause.namedBindings.elements.every((e) => e.isTypeOnly)));
+      const typeOnly = !!clause && (clause.phaseModifier === ts.SyntaxKind.TypeKeyword || (!clause.name && !!clause.namedBindings && ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.length > 0 && clause.namedBindings.elements.every((e) => e.isTypeOnly)));
       add(node, node.moduleSpecifier.text, typeOnly);
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
       add(node, node.moduleSpecifier.text, node.isTypeOnly);
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
       add(node, node.arguments[0].text, false);
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(sf);
   return out;
@@ -47,7 +48,7 @@ export async function checkLayers(config) {
   for (const file of files) {
     const fromSrc = toRelative(src, file);
     const rel = toRelative(config.root, file);
-    const sf = ts.createSourceFile(file, readText(file), ts.ScriptTarget.Latest, true, /x$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+    const sf = parseSourceFile(file, readText(file));
 
     for (const { specifier, typeOnly, line } of importsOf(sf)) {
       const exempt = exceptions[`${rel}->${specifier}`];

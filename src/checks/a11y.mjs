@@ -14,7 +14,8 @@
 // `path#onClick-source` so they stay attached to their element across
 // unrelated edits above it.
 
-import ts from "typescript";
+import * as ts from "typescript/unstable/ast";
+import { parseSourceFile } from "../typescript.mjs";
 import path from "node:path";
 import { collectFiles, readText, toRelative } from "../files.mjs";
 import { createReport, fail } from "../report.mjs";
@@ -38,7 +39,7 @@ function hasTextInSubtree(element) {
       const alt = attribute(attrs, "alt");
       if ((alt && !isStringValue(alt, "")) || attribute(attrs, "aria-label")) found = true;
     }
-    if (!found) ts.forEachChild(node, walk);
+    if (!found) node.forEachChild(walk);
   };
   if (ts.isJsxElement(element)) element.children.forEach(walk);
   return found;
@@ -69,7 +70,7 @@ export async function checkA11y(config) {
 
   for (const file of files) {
     const rel = toRelative(config.root, file);
-    const sf = ts.createSourceFile(file, readText(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const sf = parseSourceFile(file, readText(file));
     const lineOf = (node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
     const report_ = (node, key, message) => {
       if (options.exceptions[key]) known.push(`${rel}:${lineOf(node)}  ${message}  [${options.exceptions[key]}]`);
@@ -123,7 +124,7 @@ export async function checkA11y(config) {
         hidden = hidden || isStringValue(attribute(opening.attributes.properties, "aria-hidden"), "true");
         inspect(opening, ts.isJsxElement(node) ? node : null, hidden);
       }
-      ts.forEachChild(node, (child) => visit(child, hidden));
+      node.forEachChild((child) => visit(child, hidden));
     };
     visit(sf, false);
   }

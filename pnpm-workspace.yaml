@@ -1,0 +1,3 @@
+# Sass uses the native file watcher; all other dependency build scripts stay blocked.
+allowBuilds:
+  '@parcel/watcher': true

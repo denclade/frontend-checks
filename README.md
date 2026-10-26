@@ -19,7 +19,7 @@ einmal implementiert statt viermal kopiert.
 Als Git-Submodul im App-Root, die App hängt per `file:` daran:
 
 ```sh
-git submodule add dennis@git.home.arpa:dencla/frontend-checks frontend-checks
+git submodule add https://github.com/denclade/frontend-checks.git frontend-checks
 ```
 
 ```jsonc
@@ -81,3 +81,17 @@ px-Literal wird direkt daneben kommentiert (`// Logo-Farbe, nicht themebar`).
 npm install
 npm test        # node --test gegen test/fixtures/app
 ```
+
+## Entwicklung und TypeScript 7
+
+Node 24 oder neuer; `pnpm install --frozen-lockfile` und `pnpm test`.
+Das pnpm-Lockfile ist die verbindliche Auflösung.
+
+Die AST-Prüfungen verwenden TypeScript 7 über `typescript/unstable/ast`
+und die native synchrone API. `src/typescript.mjs` kapselt diese Schnittstelle.
+Eine kleine virtuelle Dateiumgebung verhindert, dass reine Syntaxprüfungen
+das App-Projekt, dessen Importe oder Typbibliotheken laden. Snapshots werden
+nach jedem Parse freigegeben; die CLI schließt den Parser beim Beenden.
+Bibliotheksnutzer können `closeParser()` aus `src/typescript.mjs` aufrufen.
+TypeScript wird wegen der noch instabilen API auf die aktuelle Minor-Linie
+begrenzt. Neue Versionen immer mit den Fixture- und Parser-Tests prüfen.

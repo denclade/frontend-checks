@@ -1,6 +1,6 @@
 {
   "name": "@dencla/frontend-checks",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Static UI and code checks shared by the dencla SolidJS frontends: a11y, contrast, styles, scroll containers, i18n and import layers.",
   "type": "module",
   "license": "UNLICENSED",
@@ -16,15 +16,15 @@
     "src"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test --test-concurrency=1 test/*.test.mjs"
   },
   "dependencies": {
-    "typescript": "~5.9.3"
+    "typescript": "~7.0.2"
   },
   "devDependencies": {
-    "sass": "^1.105.2"
+    "sass": "^1.106.1"
   }
 }

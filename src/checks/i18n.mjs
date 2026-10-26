@@ -16,7 +16,8 @@
 // Warnings, not failures: keys nothing references (minus `dynamicKeys`),
 // and a feature file repeating wording the main file already has.
 
-import ts from "typescript";
+import * as ts from "typescript/unstable/ast";
+import { parseSourceFile } from "../typescript.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { collectFiles, readText, toRelative } from "../files.mjs";
@@ -36,13 +37,13 @@ const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
 /** Every `m.key` in the code (not in comments), with its line. */
 function messageReferences(file, text) {
-  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, /x$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const sf = parseSourceFile(file, text);
   const out = [];
   const visit = (node) => {
     if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "m") {
       out.push({ key: node.name.text, line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1 });
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(sf);
   return out;

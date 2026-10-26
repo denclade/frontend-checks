@@ -18,7 +18,8 @@
 // Phases 2 and 3 only report when BOTH sides resolve to an opaque colour;
 // anything dynamic, inherited or layered is skipped rather than guessed.
 
-import ts from "typescript";
+import * as ts from "typescript/unstable/ast";
+import { parseSourceFile } from "../typescript.mjs";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { contrastRatio, parseColor, toHex } from "../color.mjs";
@@ -240,7 +241,7 @@ function onlyIcons(node, icons) {
       sawText = true;
       return;
     }
-    ts.forEachChild(child, walk);
+    child.forEachChild(walk);
   };
   node.children.forEach(walk);
   return sawIcon && !sawText;
@@ -250,7 +251,7 @@ function checkRendered(report, config, { label, tokens, floor }, tsxFiles, globa
   let checked = 0;
   for (const file of tsxFiles) {
     const rel = toRelative(config.root, file);
-    const sf = ts.createSourceFile(file, readText(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const sf = parseSourceFile(file, readText(file));
     const modules = new Map();
     // Icons are graphics, not text: WCAG 1.4.11 asks 3:1 of them.
     const icons = new Set();
@@ -304,7 +305,7 @@ function checkRendered(report, config, { label, tokens, floor }, tsxFiles, globa
           }
         }
       }
-      ts.forEachChild(node, (child) => walk(child, next));
+      node.forEachChild((child) => walk(child, next));
     };
     walk(sf, null);
   }

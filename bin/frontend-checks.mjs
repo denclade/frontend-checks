@@ -5,6 +5,7 @@
 // as soon as any of the named checks reports a problem (after running all
 // of them, so one run shows everything).
 
+import { closeParser } from "../src/typescript.mjs";
 import { CHECKS, loadConfig, print } from "../src/index.mjs";
 
 const args = process.argv.slice(2);
@@ -18,10 +19,14 @@ if (unknown.length > 0) {
   process.exit(2);
 }
 
-const config = await loadConfig();
 let ok = true;
-for (const name of selected) {
-  const report = await CHECKS[name](config);
-  ok = print(report, { verbose }) && ok;
+try {
+  const config = await loadConfig();
+  for (const name of selected) {
+    const report = await CHECKS[name](config);
+    ok = print(report, { verbose }) && ok;
+  }
+} finally {
+  closeParser();
 }
-process.exit(ok ? 0 : 1);
+process.exitCode = ok ? 0 : 1;
