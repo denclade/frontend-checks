@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "private": true,
+  "packageManager": "pnpm@12.15.0",
   "bin": {
     "frontend-checks": "./bin/frontend-checks.mjs"
   },
@@ -16,15 +17,15 @@
     "src"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/*.test.mjs"
+    "test": "node --test --test-isolation=none test/*.test.mjs"
   },
   "dependencies": {
-    "typescript": "~7.0.2"
+    "typescript": "7.0.2"
   },
   "devDependencies": {
-    "sass": "^1.106.1"
+    "sass": "1.106.1"
   }
 }

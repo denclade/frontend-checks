@@ -12,9 +12,9 @@
 // and dynamic import() are all seen.
 
 import * as ts from "typescript/unstable/ast";
-import { parseSourceFile } from "../typescript.mjs";
+import {parseSourceFiles} from "../typescript.mjs";
 import path from "node:path";
-import { collectFiles, readText, toRelative } from "../files.mjs";
+import { collectFiles, toRelative } from "../files.mjs";
 import { createReport, fail } from "../report.mjs";
 
 const startsWithFolder = (rel, folder) => rel === folder || rel.startsWith(`${folder}/`);
@@ -45,10 +45,9 @@ export async function checkLayers(config) {
   const { rules, forbiddenImports, exceptions } = config.layers;
   const files = collectFiles(src, /\.(tsx?|jsx?)$/, config.ignoreDirs).filter((f) => !/\.test\.[jt]sx?$/.test(f));
 
-  for (const file of files) {
+  for (const [file, sf] of parseSourceFiles(files)) {
     const fromSrc = toRelative(src, file);
     const rel = toRelative(config.root, file);
-    const sf = parseSourceFile(file, readText(file));
 
     for (const { specifier, typeOnly, line } of importsOf(sf)) {
       const exempt = exceptions[`${rel}->${specifier}`];

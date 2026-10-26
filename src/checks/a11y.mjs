@@ -15,9 +15,9 @@
 // unrelated edits above it.
 
 import * as ts from "typescript/unstable/ast";
-import { parseSourceFile } from "../typescript.mjs";
+import {parseSourceFiles} from "../typescript.mjs";
 import path from "node:path";
-import { collectFiles, readText, toRelative } from "../files.mjs";
+import { collectFiles, toRelative } from "../files.mjs";
 import { createReport, fail } from "../report.mjs";
 
 const attribute = (attrs, name) => attrs.find((a) => ts.isJsxAttribute(a) && a.name.getText() === name);
@@ -68,9 +68,8 @@ export async function checkA11y(config) {
   const files = collectFiles(path.join(config.root, config.srcDir), /\.tsx$/, config.ignoreDirs).filter((f) => !/\.test\.tsx$/.test(f));
   const known = [];
 
-  for (const file of files) {
+  for (const [file, sf] of parseSourceFiles(files)) {
     const rel = toRelative(config.root, file);
-    const sf = parseSourceFile(file, readText(file));
     const lineOf = (node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
     const report_ = (node, key, message) => {
       if (options.exceptions[key]) known.push(`${rel}:${lineOf(node)}  ${message}  [${options.exceptions[key]}]`);

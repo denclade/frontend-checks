@@ -1,4 +1,16 @@
-# @example/frontend-checks
+# @dencla/frontend-checks
+
+## Runtime and compiler API
+
+Version 0.2 requires Node 26 and TypeScript 7.0.2. The AST checks use
+`typescript/unstable/ast` and the native synchronous API, pinned to an exact
+version because those interfaces are unstable. Each check parses one virtual
+project without resolving imports or loading libraries, closes the compiler,
+and inspects the decoded source trees. No older TypeScript compiler is retained.
+
+Run `pnpm install --frozen-lockfile` and `pnpm test` here to validate the tool
+independently. Tests run in one process for the native synchronous RPC transport.
+Use the pnpm lockfile; a second npm lockfile is not maintained.
 
 Shared static checks across SolidJS frontends.
 
@@ -17,12 +29,12 @@ Shared static checks across SolidJS frontends.
 Add as a Git submodule in the app root and link via `file:`:
 
 ```sh
-git submodule add git@example.com:org/frontend-checks.git frontend-checks
+git submodule add https://github.com/denclade/frontend-checks.git frontend-checks
 ```
 
 ```jsonc
 // App package.json
-"devDependencies": { "@example/frontend-checks": "file:./frontend-checks" },
+"devDependencies": { "@dencla/frontend-checks": "file:./frontend-checks" },
 "scripts": {
   "check:a11y": "frontend-checks a11y",
   // …
@@ -69,20 +81,6 @@ Justified exceptions belong in the configuration rather than inline code comment
 ## Development
 
 ```sh
-npm install
-npm test        # runs node --test against test/fixtures/app
+pnpm install --frozen-lockfile
+pnpm test        # runs node --test against test/fixtures/app
 ```
-## Development and TypeScript 7
-
-Use Node 24 or later, `pnpm install --frozen-lockfile`, and `pnpm test`.
-The pnpm lockfile is the authoritative dependency resolution.
-
-AST checks use `typescript/unstable/ast` and TypeScript 7's native synchronous
-API. `src/typescript.mjs` isolates this interface behind a small virtual
-filesystem so syntax checks load neither the application's project nor its
-imports or type libraries. Every parse disposes its snapshot; the CLI closes
-the parser when finished. Library callers can use `closeParser()` from
-`src/typescript.mjs` to release it explicitly.
-
-Because this API is still unstable, TypeScript stays within the current
-minor version. Verify upgrades with both fixture and parser regression tests.

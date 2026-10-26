@@ -15,7 +15,7 @@
 // written as text it is the unscoped name, and the module's rule never applies.
 
 import * as ts from "typescript/unstable/ast";
-import { parseSourceFile } from "../typescript.mjs";
+import {parseSourceFiles} from "../typescript.mjs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { collectFiles, readText, toRelative } from "../files.mjs";
@@ -150,9 +150,8 @@ export async function checkModules(config) {
   let references = 0;
   let selectors = 0;
 
-  for (const file of files) {
+  for (const [file, sf] of parseSourceFiles(files)) {
     const rel = toRelative(config.root, file);
-    const sf = parseSourceFile(file, readText(file));
     const modules = new Map();
     for (const st of sf.statements) {
       if (ts.isImportDeclaration(st) && ts.isStringLiteral(st.moduleSpecifier) && st.moduleSpecifier.text.endsWith(".module.scss") && st.importClause?.name) {
