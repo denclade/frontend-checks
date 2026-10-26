@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "Static UI and code checks shared by the dencla SolidJS frontends: a11y, contrast, styles, scroll containers, i18n and import layers.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "bin": {
     "frontend-checks": "./bin/frontend-checks.mjs"
