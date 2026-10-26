@@ -11,9 +11,10 @@
 // Imports are read from the syntax tree, so multi-line imports, re-exports
 // and dynamic import() are all seen.
 
-import ts from "typescript";
+import * as ts from "typescript/unstable/ast";
+import {parseSourceFiles} from "../typescript.mjs";
 import path from "node:path";
-import { collectFiles, readText, toRelative } from "../files.mjs";
+import { collectFiles, toRelative } from "../files.mjs";
 import { createReport, fail } from "../report.mjs";
 
 const startsWithFolder = (rel, folder) => rel === folder || rel.startsWith(`${folder}/`);
@@ -32,7 +33,7 @@ function importsOf(sf) {
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
       add(node, node.arguments[0].text, false);
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(sf);
   return out;
@@ -44,10 +45,9 @@ export async function checkLayers(config) {
   const { rules, forbiddenImports, exceptions } = config.layers;
   const files = collectFiles(src, /\.(tsx?|jsx?)$/, config.ignoreDirs).filter((f) => !/\.test\.[jt]sx?$/.test(f));
 
-  for (const file of files) {
+  for (const [file, sf] of parseSourceFiles(files)) {
     const fromSrc = toRelative(src, file);
     const rel = toRelative(config.root, file);
-    const sf = ts.createSourceFile(file, readText(file), ts.ScriptTarget.Latest, true, /x$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
 
     for (const { specifier, typeOnly, line } of importsOf(sf)) {
       const exempt = exceptions[`${rel}->${specifier}`];

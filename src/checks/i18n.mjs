@@ -16,7 +16,8 @@
 // Warnings, not failures: keys nothing references (minus `dynamicKeys`),
 // and a feature file repeating wording the main file already has.
 
-import ts from "typescript";
+import * as ts from "typescript/unstable/ast";
+import {parseSourceFiles} from "../typescript.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { collectFiles, readText, toRelative } from "../files.mjs";
@@ -35,14 +36,13 @@ const placeholders = (message) => new Set([...JSON.stringify(message).matchAll(/
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
 /** Every `m.key` in the code (not in comments), with its line. */
-function messageReferences(file, text) {
-  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, /x$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+function messageReferences(sf) {
   const out = [];
   const visit = (node) => {
     if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "m") {
       out.push({ key: node.name.text, line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1 });
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(sf);
   return out;
@@ -94,14 +94,18 @@ export async function checkI18n(config) {
   // reference counts as use: a key stored as a function value in a lookup
   // table is called later under another name.
   const referenced = new Set();
+  const messageFiles = [];
   for (const dir of config.i18n.sourceDirs) {
     for (const file of collectFiles(path.join(root, dir), /\.(tsx?|jsx?|mjs)$/, config.ignoreDirs)) {
       const text = readText(file);
       if (!/import\s+\*\s+as\s+m\s+from\s+["'][^"']*paraglide\/messages(\.js)?["']/.test(text)) continue;
-      for (const { key, line } of messageReferences(file, text)) {
-        referenced.add(key);
-        if (!base.has(key)) fail(report, toRelative(root, file), line, `m.${key} has no message in ${baseLocale}`);
-      }
+      messageFiles.push(file);
+    }
+  }
+  for (const [file, sf] of parseSourceFiles(messageFiles)) {
+    for (const { key, line } of messageReferences(sf)) {
+      referenced.add(key);
+      if (!base.has(key)) fail(report, toRelative(root, file), line, `m.${key} has no message in ${baseLocale}`);
     }
   }
 

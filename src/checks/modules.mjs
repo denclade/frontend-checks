@@ -14,7 +14,8 @@
 // name in `class="..."`, a `classList={{...}}` key or `el.classList.add(...)`:
 // written as text it is the unscoped name, and the module's rule never applies.
 
-import ts from "typescript";
+import * as ts from "typescript/unstable/ast";
+import {parseSourceFiles} from "../typescript.mjs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { collectFiles, readText, toRelative } from "../files.mjs";
@@ -149,9 +150,8 @@ export async function checkModules(config) {
   let references = 0;
   let selectors = 0;
 
-  for (const file of files) {
+  for (const [file, sf] of parseSourceFiles(files)) {
     const rel = toRelative(config.root, file);
-    const sf = ts.createSourceFile(file, readText(file), ts.ScriptTarget.Latest, true, /x$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     const modules = new Map();
     for (const st of sf.statements) {
       if (ts.isImportDeclaration(st) && ts.isStringLiteral(st.moduleSpecifier) && st.moduleSpecifier.text.endsWith(".module.scss") && st.importClause?.name) {
@@ -199,7 +199,7 @@ export async function checkModules(config) {
           fail(report, rel, line, `${id}.${name} is not a class of ${toRelative(config.root, module)}`);
         }
       }
-      ts.forEachChild(node, visit);
+      node.forEachChild(visit);
     };
     visit(sf);
   }

@@ -1,0 +1,2 @@
+verifyDepsBeforeRun: false
+storeDir: node_modules/.pnpm-store
